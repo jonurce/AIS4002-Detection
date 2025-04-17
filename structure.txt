@@ -1,0 +1,22 @@
+C:\Users\jonur\Workspace\AIS4002-Detection\
+├── Datasets\
+│   └── Dataset_Drone_Station\
+│       ├── Images_Drone_Station\          # 669 JPEG images
+│       │   ├── image_2025_04_16_12_34_56.jpg
+│       │   ├── ...
+│       ├── Annotations_Drone_Station\     # 669 .txt annotations
+│       │   ├── image_2025_04_16_12_34_56.txt
+│       │   ├── ...
+│       ├── Dataset_Drone_Station\         # Split dataset (train/val/test)
+│       │   ├── train\
+│       │   │   ├── images\
+│       │   │   ├── labels\
+│       │   ├── val\
+│       │   │   ├── images\
+│       │   │   ├── labels\
+│       │   ├── test\
+│       │   │   ├── images\
+│       │   │   ├── labels\
+│       ├── data_drone_station.yaml        # Dataset config
+│       ├── 4_TrainYOLOv8.py              # Training script
+│       ├── classes_drone_station.txt      # Classes: A, B
