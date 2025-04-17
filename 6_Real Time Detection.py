@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import numpy as np
 
 # Paths
-model_path = "Datasets/Dataset_Drone_Station/Runs_Drone_Station/yolov8n_20epoch_drone_station/weights/best.pt"
+model_path = "Datasets/Dataset_Drone_Station/Runs_Drone_Station/yolov8l_drone_station4/weights/best.pt"
 output_dir = "Detections/Drone_Station_Detections"
 
 # Create output directory for saved frames
@@ -45,7 +45,7 @@ try:
             break
 
         # Run YOLOv8 inference
-        results = model.predict(frame, conf=0.5, iou=0.5, device="cpu")  # CPU, adjust conf if needed
+        results = model.predict(frame, conf=0.7, iou=0.5, device="cpu")  # CPU, adjust conf if needed
 
         # Draw bounding boxes and labels
         for result in results:
