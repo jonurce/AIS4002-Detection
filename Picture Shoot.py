@@ -3,7 +3,7 @@ import os
 import datetime
 
 # Create output directory if it doesn't exist
-output_dir = "Images/Original/None"
+output_dir = "Datasets/Original"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
