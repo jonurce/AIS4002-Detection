@@ -1,0 +1,2 @@
+echo Drone > classes_drone_station.txt
+echo Station >> classes_drone_station.txt
