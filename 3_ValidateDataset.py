@@ -24,6 +24,6 @@ def validate_split(split, dataset_dir):
 
 
 # Validate all splits
-dataset_dir = "Datasets/Dataset_Drone_Station/Dataset_Drone_Station"
+dataset_dir = "Datasets/Dataset_NN1/Dataset_NN1"
 for split in ["train", "val", "test"]:
     validate_split(split, dataset_dir)

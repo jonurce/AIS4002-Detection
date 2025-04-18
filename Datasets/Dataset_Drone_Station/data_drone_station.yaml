@@ -1,6 +1,0 @@
-train: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_Drone_Station/Dataset_Drone_Station/train/images
-val: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_Drone_Station/Dataset_Drone_Station/val/images
-test: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_Drone_Station/Dataset_Drone_Station/test/images
-
-nc: 2  # Number of classes
-names: ['Drone', 'Station']  # Class names (order matches classes.txt)
