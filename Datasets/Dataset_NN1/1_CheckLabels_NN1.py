@@ -3,8 +3,8 @@ import os
 import numpy as np
 
 # Paths
-image_dir = "Datasets/Dataset_NN1/Images_NN1"
-annotation_dir = "Datasets/Dataset_NN1/Annotations_NN1" # class_id, x_center, y_center, box_width, box_height
+image_dir = "Images_NN1"
+annotation_dir = "Annotations_NN1"  # class_id, x_center, y_center, box_width, box_height
 classes = ["Drone", "Station"]  # First coordinate of annotations: 0 for drone; 1 for station
 
 # Get list of images

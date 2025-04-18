@@ -3,9 +3,9 @@ import shutil
 import random
 
 # Paths
-image_dir = "Datasets/Dataset_NN1/Images_NN1"
-annotation_dir = "Datasets/Dataset_NN1/Annotations_NN1" # class_id, x_center, y_center, box_width, box_height
-dataset_dir = "Datasets/Dataset_NN1/Dataset_NN1"
+image_dir = "Datasets/Dataset_NN2/Images_NN2"
+annotation_dir = "Datasets/Dataset_NN2/Annotations_NN2_complete" # class_id, x_center, y_center, box_width, box_height
+dataset_dir = "Datasets/Dataset_NN2/Dataset_NN2"
 splits = {"train": 0.8, "val": 0.1, "test": 0.1}  # 80/10/10 split
 
 # Create dataset directories
