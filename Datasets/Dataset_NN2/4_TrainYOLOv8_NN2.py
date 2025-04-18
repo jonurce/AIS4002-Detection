@@ -5,8 +5,8 @@ model = YOLO("yolov8s.pt")  # Options: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov
 
 # Train the model
 results = model.train(
-    data="data_NN1.yaml",  # Path to dataset config
-    epochs=60,         # Number of training epochs
+    data="data_NN2.yaml",  # Path to dataset config
+    epochs=100,         # Number of training epochs
     imgsz=640,         # Image size (resize to 640x640)
     batch=8,          # Batch size (adjust based on GPU memory)
     workers = 4,        # CPU cores
@@ -14,7 +14,7 @@ results = model.train(
     name="yolov8s_NN2",   # Experiment name
     project="Runs_NN2",
     patience=0,       # Early stopping after 10 epochs with no improvement
-    save=True,         # Save checkpoints
+    save=False,         # Save checkpoints
     save_period=10,     # Save checkpoint every 10 epochs
 # Data augmentation
     hsv_h=0.015,                     # Hue augmentation

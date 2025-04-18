@@ -1,0 +1,6 @@
+train: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Dataset_NN2/train/images
+val: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Dataset_NN2/val/images
+test: /home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Dataset_NN2/test/images
+
+nc: 10  # Number of classes
+names: ['Drone Empty', 'Drone Full', 'Station TL Empty', 'Station TL Full', 'Station TR Empty', 'Station TR Full', 'Station BL Empty', 'Station BL Full', 'Station BR Empty', 'Station BR Full']  # Class names (order matches classes.txt)

@@ -4,7 +4,7 @@ import random
 
 # Paths
 image_dir = "Datasets/Dataset_NN2/Images_NN2"
-annotation_dir = "Datasets/Dataset_NN2/Annotations_NN2_complete" # class_id, x_center, y_center, box_width, box_height
+annotation_dir = "Datasets/Dataset_NN2/Annotations_NN2_hole_id" # class_id, x_center, y_center, box_width, box_height
 dataset_dir = "Datasets/Dataset_NN2/Dataset_NN2"
 splits = {"train": 0.8, "val": 0.1, "test": 0.1}  # 80/10/10 split
 
