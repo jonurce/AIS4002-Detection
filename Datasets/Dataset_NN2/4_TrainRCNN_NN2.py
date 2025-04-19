@@ -1,9 +1,10 @@
 import os
 import torch
 import torchvision
-from torchvision.models.detection import fasterrcnn_resnet50_fpn_v2
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.transforms import v2 as T
 from torch.utils.data import DataLoader, Dataset
+from torchvision.ops import box_iou
 from PIL import Image
 import numpy as np
 
@@ -12,8 +13,8 @@ class DroneStationHoleDataset(Dataset):
         self.root = root
         self.split = split
         self.transforms = transforms
-        self.image_dir = os.path.join(root, split, "Images_NN2")
-        self.label_dir = os.path.join(root, split, "Annotations_NN2_10_classes")
+        self.image_dir = os.path.join(root, split, "images")
+        self.label_dir = os.path.join(root, split, "labels")
         self.images = [f for f in os.listdir(self.image_dir) if f.endswith(".jpg")]
         self.class_names = [
             'Drone_Hole_Empty', 'Drone_Hole_Full', 'Station_TL_Empty', 'Station_TL_Full',
@@ -98,12 +99,39 @@ def evaluate(model, data_loader, device):
         for images, targets in data_loader:
             images = [image.to(device) for image in images]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            #model.train()
             outputs = model(images)
+            #model.eval()
             for target, output in zip(targets, outputs):
-                pred_labels = output['labels']
-                true_labels = target['labels']
+
+                if not isinstance(output, dict) or 'labels' not in output:
+                    print(f"Unexpected output format: {output}")
+                    continue
+
+                pred_labels = output['labels']  # Predicted labels (tensor)
+                pred_boxes = output['boxes']  # Predicted boxes
+                true_labels = target['labels']  # Ground truth labels
+                true_boxes = target['boxes']  # Ground truth boxes
+
+                #Skip if no ground truth or predictions
+                if len(true_labels) == 0 or len(pred_labels) == 0:
+                    continue
+
+                # Compute IoU between predicted and ground truth boxes
+                iou = box_iou(pred_boxes, true_boxes)  # Shape: (num_pred, num_true)
+
+                # Match predictions to ground truth (highest IoU > threshold)
+                iou_threshold = 0.5  # Common IoU threshold for matching
+                max_iou, match_indices = iou.max(dim=1)  # Best match for each prediction
+
+                # Count correct predictions
+                for pred_idx, true_idx in enumerate(match_indices):
+                    if max_iou[pred_idx] > iou_threshold:  # Valid match
+                        if pred_labels[pred_idx] == true_labels[true_idx]:
+                            correct += 1
+
+                # Update total (number of ground truth objects)
                 total += len(true_labels)
-                correct += (pred_labels == true_labels).sum().item()
     accuracy = correct / total if total > 0 else 0
     print(f"Validation Accuracy: {accuracy:.4f}")
     return accuracy
@@ -122,7 +150,12 @@ def main():
 
     # Model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = fasterrcnn_resnet50_fpn_v2(num_classes=11, weights="COCO_V1")  # 10 classes + background
+    #model = fasterrcnn_resnet50_fpn(num_classes=11, weights="COCO_V1")  # 10 classes + background
+    # Load pre-trained Faster R-CNN with ResNet-50 FPN
+    model = fasterrcnn_resnet50_fpn(pretrained=True)
+    # Replace classifier head for 2 classes + background
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes=11)
     model.to(device)
 
     # Optimizer

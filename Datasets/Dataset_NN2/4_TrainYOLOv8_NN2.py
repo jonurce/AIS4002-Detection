@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # Load a pre-trained YOLOv8 model (nano for speed, or medium/large for accuracy)
-model = YOLO("yolov8s.pt")  # Options: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt
+model = YOLO("yolov8m.pt")  # Options: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt
 
 # Train the model
 results = model.train(
@@ -10,20 +10,20 @@ results = model.train(
     imgsz=640,         # Image size (resize to 640x640)
     batch=8,          # Batch size (adjust based on GPU memory)
     workers = 4,        # CPU cores
-    device="cpu",          # Use GPU (set to -1 for CPU)
-    name="yolov8s_NN2",   # Experiment name
+    device="cuda",          # Use GPU (set to -1 for CPU)
+    name="yolov8m_NN2",   # Experiment name
     project="Runs_NN2",
     patience=0,       # Early stopping after 10 epochs with no improvement
     save=False,         # Save checkpoints
     save_period=10,     # Save checkpoint every 10 epochs
 # Data augmentation
-    hsv_h=0.015,                     # Hue augmentation
+    hsv_h=0.02,                     # Hue augmentation
     hsv_s=0.7,                       # Saturation augmentation
     hsv_v=0.4,                       # Value (brightness) augmentation
-    rotate=30,                       # Rotation up to ±10 degrees
+    degrees=50,                       # Rotation up to ±10 degrees
     translate=0.2,                    # Translation up to 10% of image
     scale=0.5                        # Scaling up to 50%
 )
 
 # Print training results
-print("Training completed. Results saved in Runs_NN2/yolov8s_NN2")
+print("Training completed. Results saved in Runs_NN2/yolov8m_NN2")
