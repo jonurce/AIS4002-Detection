@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import numpy as np
 
 # Paths
-model_path = "Datasets/Dataset_NN1/Runs_NN1/yolov8l_NN1/weights/best.pt"
+model_path = "Runs_NN1/yolov8l_NN1/weights/best.pt"
 output_dir = "Detections/YOLOv8l_NN1"
 
 # Create output directory for saved frames

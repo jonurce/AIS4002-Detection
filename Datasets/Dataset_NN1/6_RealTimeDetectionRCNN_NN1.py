@@ -9,7 +9,7 @@ import numpy as np
 import datetime
 
 # Paths
-model_path = "Datasets/Dataset_NN1/Runs_NN1/faster_rcnn_NN1/best.pt"
+model_path = "Runs_NN1/faster_rcnn_NN1/best.pt"
 output_dir = "Detections/RCNN_NN1"
 
 # Create output directory
