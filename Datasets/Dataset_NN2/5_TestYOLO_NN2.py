@@ -2,18 +2,18 @@ from ultralytics import YOLO
 import os
 
 # Load the trained model
-model = YOLO("Runs_NN1/yolov8l_NN1/weights/last.pt")
+model = YOLO("Runs_NN2/yolov8l_NN2/weights/last.pt")
 
 # Test on test set
 results = model.predict(
-    source="Dataset_NN1/test/images",
+    source="Dataset_NN2/test/images",
     conf=0.7,  # Confidence threshold
     iou=0.5,   # IoU threshold for NMS
     save=True, # Save predictions
     save_txt=False,  # Save YOLO-format predictions
-    name="YOLOv8l_test_predictions_NN1",  # Output folder
-    project="Tests_NN1"
+    name="YOLOv8l_test_predictions_NN2",  # Output folder
+    project="Tests_NN2"
 )
 
 # Print results
-print("Predictions saved in Runs_NN1/YOLOv8l_test_predictions_NN1")
+print("Predictions saved in Tests_NN2/YOLOv8l_test_predictions_NN2")

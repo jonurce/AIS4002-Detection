@@ -10,7 +10,7 @@ def get_model(num_classes, model_path, device):
     model = fasterrcnn_resnet50_fpn(pretrained=False)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
-    model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     return model.to(device)
 
 def main():
@@ -19,19 +19,23 @@ def main():
     print(f"Using device: {device}")
 
     # Paths
-    model_path = "Runs_NN1/faster_rcnn_NN1/best.pt"
-    test_image_dir = "Dataset_NN1/test/images"
-    output_dir = "Tests_NN1/faster_rcnn_test_predictions_NN1"
+    model_path = "Runs_NN2/faster_rcnn_NN2/best.pth"
+    test_image_dir = "Dataset_NN2/test/images"
+    output_dir = "Tests_NN2/faster_rcnn_test_predictions_NN2"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     # Model
-    num_classes = 3  # A, B + background
+    num_classes = 11  # classes (empty/full x 0/1/2/3/4 = 10) + background = 11
     model = get_model(num_classes, model_path, device)
     model.eval()
 
     # Classes
-    classes = ["background", "Drone", "Station"]
+    classes = [
+            'Background', 'Drone_Hole_Empty', 'Drone_Hole_Full',
+            'Station_TL_Empty', 'Station_TL_Full', 'Station_TR_Empty', 'Station_TR_Full',
+            'Station_BL_Empty', 'Station_BL_Full', 'Station_BR_Empty', 'Station_BR_Full'
+        ]
 
     # Test images
     image_files = [f for f in os.listdir(test_image_dir) if f.endswith(".jpg")]
