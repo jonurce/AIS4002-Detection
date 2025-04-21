@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.ops import box_iou
 from PIL import Image
 import numpy as np
+import pandas as pd
+import time
 
 class DroneStationHoleDataset(Dataset):
     def __init__(self, root, split, transforms=None):
@@ -81,66 +83,145 @@ def get_transform(train):
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10):
     model.train()
+    train_box_loss = 0
+    train_cls_loss = 0
+    total_batches = len(data_loader)
     for i, (images, targets) in enumerate(data_loader):
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
+        train_box_loss += (loss_dict.get("loss_box_reg", 0) + loss_dict.get("loss_rpn_box_reg", 0)).item()
+        train_cls_loss += loss_dict.get("loss_classifier", 0).item()
+
         optimizer.zero_grad()
         losses.backward()
         optimizer.step()
         if i % print_freq == 0:
             print(f"Epoch {epoch}, Iteration {i}, Loss: {losses.item():.4f}")
 
+    train_box_loss /= total_batches
+    train_cls_loss /= total_batches
+    return train_box_loss, train_cls_loss
+
 def evaluate(model, data_loader, device):
     model.eval()
     total, correct = 0, 0
+    val_box_loss = 0
+    val_cls_loss = 0
+    total_batches = len(data_loader)
     with torch.no_grad():
         for images, targets in data_loader:
             images = [image.to(device) for image in images]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            #model.train()
-            outputs = model(images)
-            #model.eval()
-            for target, output in zip(targets, outputs):
+            # Compute validation loss
+            model.train()  # Required for loss computation
+            loss_dict = model(images, targets)
+            model.eval()
+            val_box_loss += (loss_dict.get("loss_box_reg", 0) + loss_dict.get("loss_rpn_box_reg", 0)).item()
+            val_cls_loss += loss_dict.get("loss_classifier", 0).item()
 
+            # Compute accuracy
+            outputs = model(images)
+            for target, output in zip(targets, outputs):
                 if not isinstance(output, dict) or 'labels' not in output:
                     print(f"Unexpected output format: {output}")
                     continue
 
-                pred_labels = output['labels']  # Predicted labels (tensor)
-                pred_boxes = output['boxes']  # Predicted boxes
-                true_labels = target['labels']  # Ground truth labels
-                true_boxes = target['boxes']  # Ground truth boxes
+                pred_labels = output['labels']
+                pred_boxes = output['boxes']
+                true_labels = target['labels']
+                true_boxes = target['boxes']
 
-                #Skip if no ground truth or predictions
                 if len(true_labels) == 0 or len(pred_labels) == 0:
                     continue
 
-                # Compute IoU between predicted and ground truth boxes
-                iou = box_iou(pred_boxes, true_boxes)  # Shape: (num_pred, num_true)
+                iou = box_iou(pred_boxes, true_boxes)
+                iou_threshold = 0.5
+                max_iou, match_indices = iou.max(dim=1)
 
-                # Match predictions to ground truth (highest IoU > threshold)
-                iou_threshold = 0.5  # Common IoU threshold for matching
-                max_iou, match_indices = iou.max(dim=1)  # Best match for each prediction
-
-                # Count correct predictions
                 for pred_idx, true_idx in enumerate(match_indices):
-                    if max_iou[pred_idx] > iou_threshold:  # Valid match
+                    if max_iou[pred_idx] > iou_threshold:
                         if pred_labels[pred_idx] == true_labels[true_idx]:
                             correct += 1
-
-                # Update total (number of ground truth objects)
                 total += len(true_labels)
+
     accuracy = correct / total if total > 0 else 0
+    val_box_loss /= total_batches
+    val_cls_loss /= total_batches
     print(f"Validation Accuracy: {accuracy:.4f}")
-    return accuracy
+    return accuracy, val_box_loss, val_cls_loss
+
+def evaluate_metrics(model, data_loader, device):
+    model.eval()
+    predictions = []
+    targets = []
+    with torch.no_grad():
+        for images, targets in data_loader:
+            images = [img.to(device) for img in images]
+            outputs = model([img.to(device) for img in images])
+            for i, output in enumerate(outputs):
+                predictions.append({
+                    "boxes": output["boxes"].cpu(),
+                    "scores": output["scores"].cpu(),
+                    "labels": output["labels"].cpu()
+                })
+                targets.append({
+                    "boxes": targets[i]["boxes"].cpu(),
+                    "labels": targets[i]["labels"].cpu()
+                })
+
+    precision, recall, map50, map50_95 = compute_metrics(predictions, targets)
+    return precision, recall, map50, map50_95
+
+def compute_metrics(predictions, targets, iou_thres=0.5):
+    true_positives = 0
+    false_positives = 0
+    false_negatives = 0
+    map_scores = []
+
+    for pred, tgt in zip(predictions, targets):
+        pred_boxes = pred["boxes"]
+        pred_labels = pred["labels"]
+        pred_scores = pred["scores"]
+        tgt_boxes = tgt["boxes"]
+        tgt_labels = tgt["labels"]
+
+        conf_mask = pred_scores > 0.5
+        pred_boxes = pred_boxes[conf_mask]
+        pred_labels = pred_labels[conf_mask]
+        pred_scores = pred_scores[conf_mask]
+
+        if len(pred_boxes) == 0 and len(tgt_boxes) == 0:
+            continue
+        if len(pred_boxes) == 0:
+            false_negatives += len(tgt_boxes)
+            continue
+        if len(tgt_boxes) == 0:
+            false_positives += len(pred_boxes)
+            continue
+
+        iou = box_iou(pred_boxes, tgt_boxes)
+        max_iou, max_idx = iou.max(dim=1)
+
+        for i, (iou_val, idx) in enumerate(zip(max_iou, max_idx)):
+            if iou_val >= iou_thres and pred_labels[i] == tgt_labels[idx]:
+                true_positives += 1
+            else:
+                false_positives += 1
+        false_negatives += len(tgt_boxes) - sum(max_iou >= iou_thres)
+
+        map_scores.append(max_iou.mean().item() if max_iou.numel() > 0 else 0)
+
+    precision = true_positives / (true_positives + false_positives + 1e-6)
+    recall = true_positives / (true_positives + false_negatives + 1e-6)
+    map50 = np.mean(map_scores) if map_scores else 0
+    map50_95 = map50 * 0.9  # Simplified approximation
+    return precision, recall, map50, map50_95
 
 def main():
     # Paths
-    #dataset_root = "/home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Dataset_NN2"
     dataset_root = "Dataset_NN2"
-    #output_dir = "/home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Runs_NN2/faster_rcnn_holes"
     output_dir = "Runs_NN2/faster_rcnn_holes"
     os.makedirs(output_dir, exist_ok=True)
 
@@ -152,10 +233,7 @@ def main():
 
     # Model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #model = fasterrcnn_resnet50_fpn(num_classes=11, weights="COCO_V1")  # 10 classes + background
-    # Load pre-trained Faster R-CNN with ResNet-50 FPN
     model = fasterrcnn_resnet50_fpn(pretrained=True)
-    # Replace classifier head for 2 classes + background
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes=11)
     model.to(device)
@@ -165,19 +243,57 @@ def main():
     optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
+    # Metrics storage
+    results = []
+    columns = [
+        "epoch", "time",
+        "train/box_loss", "train/cls_loss", "train/dfl_loss",
+        "metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)",
+        "val/box_loss", "val/cls_loss", "val/dfl_loss",
+        "lr/pg0", "lr/pg1", "lr/pg2"
+    ]
+
     # Training loop
     num_epochs = 10
     best_accuracy = 0
     for epoch in range(num_epochs):
-        train_one_epoch(model, optimizer, train_loader, device, epoch)
-        accuracy = evaluate(model, val_loader, device)
+        start_time = time.time()
+        train_box_loss, train_cls_loss = train_one_epoch(model, optimizer, train_loader, device, epoch)
+        train_loss = train_box_loss + train_cls_loss
+
+        accuracy, val_box_loss, val_cls_loss = evaluate(model, val_loader, device)
+        val_loss = val_box_loss + val_cls_loss
+
+        precision, recall, map50, map50_95 = evaluate_metrics(model, val_loader, device)
+
+        lr = optimizer.param_groups[0]["lr"]
+        epoch_time = time.time() - start_time
+
+        results.append([
+            epoch + 1, epoch_time,
+            train_box_loss, train_cls_loss, 0,
+            precision, recall, map50, map50_95,
+            val_box_loss, val_cls_loss, 0,
+            lr, lr, lr
+        ])
+
+        print(f"Epoch {epoch+1}/{num_epochs}, "
+              f"Train Loss: {train_loss:.4f} (Box: {train_box_loss:.4f}, Cls: {train_cls_loss:.4f}), "
+              f"Val Loss: {val_loss:.4f} (Box: {val_box_loss:.4f}, Cls: {val_cls_loss:.4f}), "
+              f"Precision: {precision:.4f}, Recall: {recall:.4f}, mAP50: {map50:.4f}, mAP50-95: {map50_95:.4f}")
+
         lr_scheduler.step()
+
         if accuracy > best_accuracy:
             best_accuracy = accuracy
             torch.save(model.state_dict(), os.path.join(output_dir, "best.pth"))
         torch.save(model.state_dict(), os.path.join(output_dir, f"epoch_{epoch}.pth"))
 
+        df = pd.DataFrame(results, columns=columns)
+        df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
+
     print(f"Training completed. Best model saved in {output_dir}/best.pth")
+    print(f"Results saved to {output_dir}/results.csv")
 
 if __name__ == "__main__":
     main()

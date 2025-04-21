@@ -14,9 +14,9 @@ results = model.train(
     device="cuda",          # Use GPU (set to -1 for CPU)
     name="yolov8n_NN1",   # Experiment name
     project="Runs_NN1",
-    patience=0,       # Early stopping after 10 epochs with no improvement
-    save=False,         # Save checkpoints
-    save_period=10,     # Save checkpoint every 10 epochs
+    patience=0,       # No early stopping
+    save=True,         # No save checkpoints
+    save_period=200,     # Save checkpoint every 10 epochs
 # Data augmentation
     hsv_h=0.02,                     # Hue augmentation
     hsv_s=0.7,                       # Saturation augmentation
