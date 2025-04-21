@@ -15,7 +15,7 @@ def get_model(num_classes, model_path, device):
     model = fasterrcnn_resnet50_fpn(pretrained=False)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
     return model.to(device)
 
 def main():
@@ -29,8 +29,8 @@ def main():
     output_dir = "Tests_NN2/faster_rcnn_test_predictions_NN2"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Model and class setup
-    num_classes = 11  # 10 classes + background
+    # Model
+    num_classes = 11  # Background, Drone, Station
     classes = [
         'Background', 'Drone_Hole_Empty', 'Drone_Hole_Full',
         'Station_TL_Empty', 'Station_TL_Full', 'Station_TR_Empty', 'Station_TR_Full',
@@ -38,21 +38,25 @@ def main():
     ]
     model = get_model(num_classes, model_path, device)
     model.eval()
+
+    # Transforms
     transform = ToTensor()
 
-    # Data storage
+    # Initialize containers
     all_predictions = []
     all_ground_truths = []
+    image_id = 0
     y_true = []
     y_pred = []
-    image_id = 0
 
+    # Test images
     image_files = [f for f in os.listdir(test_image_dir) if f.endswith(".jpg")]
 
     with torch.no_grad():
         for img_file in image_files:
             img_path = os.path.join(test_image_dir, img_file)
             label_path = os.path.join(label_dir, img_file.replace(".jpg", ".txt"))
+
             img = cv2.imread(img_path)
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_tensor = transform(img_rgb).to(device)
@@ -64,25 +68,27 @@ def main():
             labels = outputs["labels"].cpu().numpy()
             scores = outputs["scores"].cpu().numpy()
 
-            conf_threshold = 0.7
+            # Filter predictions by confidence
+            conf_threshold = 0.3
             mask = scores >= conf_threshold
             boxes = boxes[mask]
             labels = labels[mask]
             scores = scores[mask]
 
-            # Save predictions
+            # Save prediction JSON
             for box, label, score in zip(boxes, labels, scores):
                 x1, y1, x2, y2 = box
                 width, height = x2 - x1, y2 - y1
                 all_predictions.append({
-                    "image_id": image_id,
+                    "image_id": int(image_id),
                     "category_id": int(label),
-                    "bbox": [x1, y1, width, height],
+                    "bbox": [float(x1), float(y1), float(width), float(height)],
                     "score": float(score)
                 })
+
                 y_pred.append(int(label))
 
-            # Draw predictions
+            # Save image with boxes
             for box, label, score in zip(boxes, labels, scores):
                 x1, y1, x2, y2 = map(int, box)
                 label_text = f"{classes[label]} {score:.2f}"
@@ -91,7 +97,7 @@ def main():
 
             cv2.imwrite(os.path.join(output_dir, img_file), img)
 
-            # Load YOLO-format labels
+            # Load YOLO-format ground truths
             if os.path.exists(label_path):
                 with open(label_path, "r") as f:
                     for line in f.readlines():
@@ -101,17 +107,18 @@ def main():
                         w *= img_w
                         h *= img_h
                         all_ground_truths.append({
-                            "image_id": image_id,
-                            "category_id": int(cls) + 1,  # Offset for background
-                            "bbox": [x, y, w, h],
-                            "area": w * h,
+                            "image_id": int(image_id),
+                            "category_id": int(cls) + 1,
+                            "bbox": [float(x), float(y), float(w), float(h)],
+                            "area": float(w * h),
                             "iscrowd": 0,
-                            "id": len(all_ground_truths)
+                            "id": int(len(all_ground_truths))
                         })
-                        y_true.append(int(cls) + 1)
+
+                        y_true.append(int(cls) + 1)  # offset for background
             image_id += 1
 
-    # Save COCO-style files
+    # Save COCO-format files
     coco_gt_dict = {
         "images": [{"id": i} for i in range(image_id)],
         "annotations": all_ground_truths,
@@ -123,7 +130,7 @@ def main():
     with open(os.path.join(output_dir, "predictions.json"), "w") as f:
         json.dump(all_predictions, f)
 
-    # Evaluate
+    # Evaluate using pycocotools
     coco_gt = COCO(os.path.join(output_dir, "labels.json"))
     coco_dt = coco_gt.loadRes(os.path.join(output_dir, "predictions.json"))
     coco_eval = COCOeval(coco_gt, coco_dt, iouType="bbox")
@@ -131,17 +138,41 @@ def main():
     coco_eval.accumulate()
     coco_eval.summarize()
 
-    # Save results
+    # Save metrics to file
     with open(os.path.join(output_dir, "results.txt"), "w") as f:
         f.write("Precision, Recall, mAP@0.5, mAP@0.5:0.95\n")
         f.write(f"{coco_eval.stats[0]:.4f}, {coco_eval.stats[1]:.4f}, "
                 f"{coco_eval.stats[1]:.4f}, {coco_eval.stats[2]:.4f}\n")
 
-    # Confusion Matrix
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(1, num_classes)))  # Exclude background
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes[1:])
-    disp.plot(cmap=plt.cm.Blues, xticks_rotation=45)
-    plt.title("Confusion Matrix")
+    # Confusion matrix
+    # Reorder so background (0) is last
+    ordered_labels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0]  # Drone, Station, Background
+    ordered_class_names = [classes[i] for i in ordered_labels]
+
+    cm = confusion_matrix(y_true, y_pred, labels=ordered_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=ordered_class_names)
+
+    # Plot with larger font
+    fig, ax = plt.subplots(figsize=(8, 6))  # Optional: make the figure a bit larger
+    disp.plot(
+        cmap=plt.cm.Blues,
+        xticks_rotation=45,
+        ax=ax,
+        values_format='d'
+    )
+
+    plt.title("Confusion Matrix", fontsize = 16)
+    plt.xlabel("Predicted Label", fontsize=14)
+    plt.ylabel("True Label", fontsize=14)
+    ax.tick_params(labelsize=12)
+
+    # 🔥 Make numbers inside the matrix bigger
+    for text in disp.text_.ravel():
+        if text:  # skip if None
+            text.set_fontsize(18)
+
+    # Save the plot
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "confusion_matrix.png"))
     plt.close()
 

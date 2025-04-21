@@ -203,13 +203,15 @@ def compute_metrics(predictions, targets, iou_thres=0.5):
 
         iou = box_iou(pred_boxes, tgt_boxes)
         max_iou, max_idx = iou.max(dim=1)
+        matched_gt = set()
 
         for i, (iou_val, idx) in enumerate(zip(max_iou, max_idx)):
             if iou_val >= iou_thres and pred_labels[i] == tgt_labels[idx]:
                 true_positives += 1
+                matched_gt.add(idx.item())
             else:
                 false_positives += 1
-        false_negatives += len(tgt_boxes) - (max_iou >= iou_thres).sum().item()
+        false_negatives += len(tgt_boxes) - len(matched_gt)
 
         map_scores.append(max_iou.mean().item() if max_iou.numel() > 0 else 0)
 

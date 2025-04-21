@@ -76,11 +76,12 @@ def main():
                 x1, y1, x2, y2 = box
                 width, height = x2 - x1, y2 - y1
                 all_predictions.append({
-                    "image_id": image_id,
+                    "image_id": int(image_id),
                     "category_id": int(label),
-                    "bbox": [x1, y1, width, height],
+                    "bbox": [float(x1), float(y1), float(width), float(height)],
                     "score": float(score)
                 })
+
                 y_pred.append(int(label))
 
             # Save image with boxes
@@ -102,13 +103,14 @@ def main():
                         w *= img_w
                         h *= img_h
                         all_ground_truths.append({
-                            "image_id": image_id,
-                            "category_id": int(cls) + 1,  # offset for background class
-                            "bbox": [x, y, w, h],
-                            "area": w * h,
+                            "image_id": int(image_id),
+                            "category_id": int(cls) + 1,
+                            "bbox": [float(x), float(y), float(w), float(h)],
+                            "area": float(w * h),
                             "iscrowd": 0,
-                            "id": len(all_ground_truths)
+                            "id": int(len(all_ground_truths))
                         })
+
                         y_true.append(int(cls) + 1)  # offset for background
             image_id += 1
 
@@ -139,10 +141,34 @@ def main():
                 f"{coco_eval.stats[1]:.4f}, {coco_eval.stats[2]:.4f}\n")
 
     # Confusion matrix
-    cm = confusion_matrix(y_true, y_pred, labels=[1, 2])
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes[1:])
-    disp.plot(cmap=plt.cm.Blues, xticks_rotation=45)
-    plt.title("Confusion Matrix")
+    # Reorder so background (0) is last
+    ordered_labels = [1, 2, 0]  # Drone, Station, Background
+    ordered_class_names = [classes[i] for i in ordered_labels]
+
+    cm = confusion_matrix(y_true, y_pred, labels=ordered_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=ordered_class_names)
+
+    # Plot with larger font
+    fig, ax = plt.subplots(figsize=(8, 6))  # Optional: make the figure a bit larger
+    disp.plot(
+        cmap=plt.cm.Blues,
+        xticks_rotation=45,
+        ax=ax,
+        values_format='d'
+    )
+
+    plt.title("Confusion Matrix", fontsize = 16)
+    plt.xlabel("Predicted Label", fontsize=14)
+    plt.ylabel("True Label", fontsize=14)
+    ax.tick_params(labelsize=12)
+
+    # 🔥 Make numbers inside the matrix bigger
+    for text in disp.text_.ravel():
+        if text:  # skip if None
+            text.set_fontsize(18)
+
+    # Save the plot
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "confusion_matrix.png"))
     plt.close()
 

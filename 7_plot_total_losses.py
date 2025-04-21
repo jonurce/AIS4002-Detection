@@ -62,7 +62,7 @@ for nn in range(1,3):
     plt.tick_params(axis='both', labelsize=font_size)  # Tick labels
     plt.grid(True, which="both", ls="--")  # Grid for both major and minor ticks
     plt.legend(fontsize=font_size)
-    plt.savefig(f'{output_dir}/val_loss_nn{nn}.png')
+    plt.savefig(f'{output_dir}/val_loss_yolo_nn{nn}.png')
     plt.close()
 
     # Plot 3: Total Train and Validation Loss vs. Epoch for Faster R-CNN (Log Scale)
