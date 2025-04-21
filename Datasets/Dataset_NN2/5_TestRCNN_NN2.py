@@ -69,7 +69,7 @@ def main():
             scores = outputs["scores"].cpu().numpy()
 
             # Filter predictions by confidence
-            conf_threshold = 0.3
+            conf_threshold = 0.7
             mask = scores >= conf_threshold
             boxes = boxes[mask]
             labels = labels[mask]
@@ -144,39 +144,6 @@ def main():
         f.write(f"{coco_eval.stats[0]:.4f}, {coco_eval.stats[1]:.4f}, "
                 f"{coco_eval.stats[1]:.4f}, {coco_eval.stats[2]:.4f}\n")
 
-    # Confusion matrix
-    # Reorder so background (0) is last
-    ordered_labels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0]  # Drone, Station, Background
-    ordered_class_names = [classes[i] for i in ordered_labels]
-
-    cm = confusion_matrix(y_true, y_pred, labels=ordered_labels)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=ordered_class_names)
-
-    # Plot with larger font
-    fig, ax = plt.subplots(figsize=(8, 6))  # Optional: make the figure a bit larger
-    disp.plot(
-        cmap=plt.cm.Blues,
-        xticks_rotation=45,
-        ax=ax,
-        values_format='d'
-    )
-
-    plt.title("Confusion Matrix", fontsize = 16)
-    plt.xlabel("Predicted Label", fontsize=14)
-    plt.ylabel("True Label", fontsize=14)
-    ax.tick_params(labelsize=12)
-
-    # 🔥 Make numbers inside the matrix bigger
-    for text in disp.text_.ravel():
-        if text:  # skip if None
-            text.set_fontsize(18)
-
-    # Save the plot
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "confusion_matrix.png"))
-    plt.close()
-
-    print(f"Results saved to: {output_dir}")
 
 if __name__ == "__main__":
     main()
