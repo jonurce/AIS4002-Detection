@@ -135,7 +135,7 @@ def compute_metrics(predictions, targets, iou_thres=0.5):
                 true_positives += 1
             else:
                 false_positives += 1
-        false_negatives += len(tgt_boxes) - sum(max_iou >= iou_thres)
+        false_negatives += len(tgt_boxes) - (max_iou >= iou_thres).sum().item()
 
         # Approximate mAP@0.5 and mAP@0.5:0.95
         map_scores.append(max_iou.mean().item() if max_iou.numel() > 0 else 0)

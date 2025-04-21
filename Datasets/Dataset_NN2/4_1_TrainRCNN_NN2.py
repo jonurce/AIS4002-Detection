@@ -209,7 +209,7 @@ def compute_metrics(predictions, targets, iou_thres=0.5):
                 true_positives += 1
             else:
                 false_positives += 1
-        false_negatives += len(tgt_boxes) - sum(max_iou >= iou_thres)
+        false_negatives += len(tgt_boxes) - (max_iou >= iou_thres).sum().item()
 
         map_scores.append(max_iou.mean().item() if max_iou.numel() > 0 else 0)
 
@@ -222,7 +222,7 @@ def compute_metrics(predictions, targets, iou_thres=0.5):
 def main():
     # Paths
     dataset_root = "Dataset_NN2"
-    output_dir = "Runs_NN2/faster_rcnn_holes"
+    output_dir = "Runs_NN2/faster_rcnn_NN2"
     os.makedirs(output_dir, exist_ok=True)
 
     # Datasets

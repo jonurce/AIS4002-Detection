@@ -6,7 +6,7 @@ import torchvision.transforms as T
 # Load model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = fasterrcnn_resnet50_v2(num_classes=11)
-model.load_state_dict(torch.load("/Runs_NN2/faster_rcnn_holes/best.pth"))
+model.load_state_dict(torch.load("/Runs_NN2/faster_rcnn_NN2/best.pth"))
 model.to(device)
 model.eval()
 
