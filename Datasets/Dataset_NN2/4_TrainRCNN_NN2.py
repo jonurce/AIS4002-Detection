@@ -141,7 +141,7 @@ def main():
     #dataset_root = "/home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Dataset_NN2"
     dataset_root = "Dataset_NN2"
     #output_dir = "/home/tmkristi/PycharmProjects/AIS4002-Detection/Datasets/Dataset_NN2/Runs_NN2/faster_rcnn_holes"
-    output_dir = "Runs_NN2/faster_rcnn_holes"
+    output_dir = "Runs_NN2/faster_rcnn_holes_1"
     os.makedirs(output_dir, exist_ok=True)
 
     # Datasets

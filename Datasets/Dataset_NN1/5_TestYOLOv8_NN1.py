@@ -10,7 +10,6 @@ results = model.predict(
     conf=0.7,  # Confidence threshold
     iou=0.5,   # IoU threshold for NMS
     save=True, # Save predictions
-    save_txt=False,  # Save YOLO-format predictions
     name="YOLOv8l_test_predictions_NN1",  # Output folder
     project="Tests_NN1"
 )

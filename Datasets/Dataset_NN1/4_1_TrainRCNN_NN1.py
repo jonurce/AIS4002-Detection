@@ -77,7 +77,7 @@ def get_model(num_classes, device):
 def evaluate_metrics(model, data_loader, device):
     model.eval()
     predictions = []
-    targets = []
+    all_targets = []
     with torch.no_grad():
         for images, targets in data_loader:
             images = list(img.to(device) for img in images)
@@ -88,13 +88,13 @@ def evaluate_metrics(model, data_loader, device):
                     "scores": output["scores"].cpu(),
                     "labels": output["labels"].cpu()
                 })
-                targets.append({
+                all_targets.append({
                     "boxes": targets[i]["boxes"].cpu(),
                     "labels": targets[i]["labels"].cpu()
                 })
 
     # Simplified evaluation (precision, recall, mAP)
-    precision, recall, map50, map50_95 = compute_metrics(predictions, targets)
+    precision, recall, map50, map50_95 = compute_metrics(predictions, all_targets)
     return precision, recall, map50, map50_95
 
 def compute_metrics(predictions, targets, iou_thres=0.5):
@@ -163,7 +163,7 @@ def box_iou(boxes1, boxes2):
 
 def main():
     # Device
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # Paths
@@ -202,8 +202,8 @@ def main():
     patience = 100
     patience_counter = 0
 
+    start_time = time.time()
     for epoch in range(num_epochs):
-        start_time = time.time()
         # Train
         model.train()
         train_box_loss = 0

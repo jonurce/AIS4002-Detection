@@ -125,8 +125,8 @@ def main():
         val_loss = 0
         with torch.no_grad():
             for images, targets in val_loader:
-                images = list(image.to("cpu") for image in images)
-                targets = [{k: v.to("cpu") for k, v in t.items()} for t in targets]
+                images = list(image.to(device) for image in images)
+                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
                 model.train()
                 loss_dict = model(images, targets)
                 model.eval()
