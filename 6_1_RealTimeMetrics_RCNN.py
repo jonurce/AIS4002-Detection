@@ -17,6 +17,7 @@ try:
         nvmlInit, nvmlDeviceGetHandleByIndex,
         nvmlDeviceGetUtilizationRates, nvmlDeviceGetPowerUsage
     )
+
     nvml_available = True
 except ImportError:
     nvml_available = False
@@ -29,13 +30,6 @@ output_dir = f"RealTime/{model_name}"
 csv_path = os.path.join(output_dir, "performance_metrics.csv")
 os.makedirs(output_dir, exist_ok=True)
 
-# CSV setup
-write_header = not os.path.exists(csv_path)
-csv_file = open(csv_path, mode='a', newline='')
-csv_writer = csv.writer(csv_file)
-if write_header:
-    csv_writer.writerow(["timestamp", "inference_time_ms", "fps", "cpu_percent", "gpu_percent", "vram_gb", "power_w"])
-
 # Device
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 use_cuda = torch.cuda.is_available()
@@ -44,6 +38,7 @@ if use_cuda and nvml_available:
     handle = nvmlDeviceGetHandleByIndex(0)
 
 print(f"Using device: {device}")
+
 
 # Load Faster R-CNN model
 def get_model(num_classes, model_path, device):
@@ -55,6 +50,7 @@ def get_model(num_classes, model_path, device):
     model.eval()
     return model
 
+
 if nn == 1:
     num_classes = 3  # Background, A, B
 else:
@@ -63,7 +59,7 @@ model = get_model(num_classes, model_path, device)
 
 # Initialize camera
 camera_index = 6
-cap = cv2.VideoCapture(camera_index) # cv2.CAP_DSHOW
+cap = cv2.VideoCapture(camera_index)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 cap.set(cv2.CAP_PROP_FPS, 30)
@@ -83,9 +79,15 @@ iou = 0.5
 class_names = ["background", "Drone", "Station"]
 transform = ToTensor()
 
+# Metrics storage
+metrics_list = []
+start_time = time.time()
+duration = 10  # Run for 10 seconds
+
 try:
-    print("Real-time detection started. Press SPACE to save frame, 'q' to quit, 'u'/'d' for conf, 'i'/'o' for IoU.")
-    while True:
+    print(
+        "Real-time detection started for 10 seconds. Press SPACE to save frame, 'q' to quit early, 'u'/'d' for conf, 'i'/'o' for IoU.")
+    while (time.time() - start_time) < duration:
         ret, frame = cap.read()
         if not ret:
             print("Error: Failed to capture frame")
@@ -134,6 +136,16 @@ try:
         power_w = nvmlDeviceGetPowerUsage(handle) / 1000 if use_cuda and nvml_available else "N/A"
         vram_gb = torch.cuda.max_memory_allocated() / 1e9 if use_cuda else "N/A"
 
+        # === Store metrics ===
+        metrics_list.append({
+            "inference_time_ms": inference_time_ms,
+            "fps": current_fps,
+            "cpu_percent": cpu_util,
+            "gpu_percent": gpu_util if gpu_util != "N/A" else None,
+            "vram_gb": vram_gb if vram_gb != "N/A" else None,
+            "power_w": power_w if power_w != "N/A" else None
+        })
+
         # === Overlay metrics ===
         metrics = [
             f"Inference: {inference_time_ms:.1f} ms",
@@ -148,18 +160,6 @@ try:
         for i, text in enumerate(metrics):
             cv2.putText(frame, text, (10, 25 + 25 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # === Log to CSV ===
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        csv_writer.writerow([
-            timestamp,
-            round(inference_time_ms, 2),
-            round(current_fps, 2),
-            round(cpu_util, 2),
-            gpu_util,
-            round(vram_gb, 3) if isinstance(vram_gb, float) else "N/A",
-            round(power_w, 2) if isinstance(power_w, float) else "N/A"
-        ])
-        csv_file.flush()
 
         # Show frame
         cv2.imshow("L515 Faster R-CNN Detection", frame)
@@ -172,7 +172,7 @@ try:
             cv2.imwrite(filename, frame)
             print(f"Detection saved: {filename}")
         elif key == ord('q'):
-            print("Exiting...")
+            print("Exiting early...")
             break
         elif key == ord('u'):
             conf = min(conf + 0.1, 1.0)
@@ -183,7 +183,32 @@ try:
         elif key == ord('o'):
             iou = max(iou - 0.1, 0.1)
 
+    # === Compute and print averages ===
+    if metrics_list:
+        avg_inference_time = np.mean([m["inference_time_ms"] for m in metrics_list])
+        avg_fps = np.mean([m["fps"] for m in metrics_list])
+        avg_cpu_util = np.mean([m["cpu_percent"] for m in metrics_list])
+
+        # Handle GPU-related metrics only if available
+        valid_gpu_utils = [m["gpu_percent"] for m in metrics_list if m["gpu_percent"] is not None]
+        avg_gpu_util = np.mean(valid_gpu_utils) if valid_gpu_utils else "N/A"
+
+        valid_vram = [m["vram_gb"] for m in metrics_list if m["vram_gb"] is not None]
+        max_vram = max(valid_vram) if valid_vram else "N/A"
+
+        valid_power = [m["power_w"] for m in metrics_list if m["power_w"] is not None]
+        avg_power = np.mean(valid_power) if valid_power else "N/A"
+
+        print("\n=== Performance Summary ===")
+        print(f"Average Inference Time: {avg_inference_time:.2f} ms")
+        print(f"Average FPS: {avg_fps:.2f}")
+        print(f"Average CPU Utilization: {avg_cpu_util:.2f}%")
+        print(
+            f"Average GPU Utilization: {avg_gpu_util:.2f}%" if avg_gpu_util != "N/A" else "Average GPU Utilization: N/A")
+        print(f"Max VRAM Usage: {max_vram:.3f} GB" if max_vram != "N/A" else "Max VRAM Usage: N/A")
+        print(
+            f"Average Power Consumption: {avg_power:.2f} W" if avg_power != "N/A" else "Average Power Consumption: N/A")
+
 finally:
     cap.release()
     cv2.destroyAllWindows()
-    csv_file.close()
