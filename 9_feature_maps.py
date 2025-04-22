@@ -60,7 +60,7 @@ with torch.no_grad():
 input_image_path = os.path.join(output_dir, "0000_input_image.png")
 plt.figure(figsize=(12.8, 7.36))  # For 1280x736 at 100 DPI
 plt.imshow(image_resized)
-plt.title("Input Image")
+plt.title("Input Image", fontsize = 44)
 plt.axis('off')
 plt.savefig(input_image_path, dpi=100, bbox_inches='tight')
 plt.close()
@@ -71,25 +71,25 @@ for idx, layer_name in enumerate(layer_names):
     if layer_name not in feature_maps:
         print(f"Warning: No feature maps captured for layer {layer_name}")
         continue
+
     fmap = feature_maps[layer_name][0]  # Shape: [channels, height, width]
     num_channels = fmap.shape[0]
     print(f"Layer {layer_name}: {num_channels} channels, shape {fmap.shape[1:]}")
 
     # Plot up to 16 channels per grid
-    num_plots = min(16, num_channels)
-    cols = 4
+    num_plots = min(36, num_channels)  # Up to 64 channels (8x8 grid)
+    cols = 6
     rows = (num_plots + cols - 1) // cols
-
-    plt.figure(figsize=(12.8, 7.36))  # For 1280x736 at 100 DPI
+    plt.figure(figsize=(12.8, 7.36))
     for i in range(num_plots):
         plt.subplot(rows, cols, i + 1)
         fmap_i = fmap[i].numpy()
-        # Normalize for visualization
         fmap_i = (fmap_i - fmap_i.min()) / (fmap_i.max() - fmap_i.min() + 1e-8)
         plt.imshow(fmap_i, cmap='viridis')
-        plt.title(f"Channel {i}", fontsize=8)
+        plt.title(f"Channel {i}", fontsize=6)  # Smaller font
         plt.axis('off')
-    plt.suptitle(f"Layer {layer_name}", fontsize=12)
+
+    plt.suptitle(f"Layer {layer_name}: {num_channels} channels, shape {fmap.shape[1:]}", fontsize=22)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
     # Save with sequential naming for video
@@ -110,7 +110,7 @@ for box, score, cls in zip(result.boxes.xyxy.cpu().numpy(), result.boxes.conf.cp
 pred_image_path = os.path.join(output_dir, f"{len(layer_names) + 1:04d}_prediction.png")
 plt.figure(figsize=(12.8, 7.36))  # For 1280x736 at 100 DPI
 plt.imshow(image_pred)
-plt.title("Prediction")
+plt.title("Prediction", fontsize = 44)
 plt.axis('off')
 plt.savefig(pred_image_path, dpi=100, bbox_inches='tight')
 plt.close()
