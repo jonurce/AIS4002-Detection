@@ -4,6 +4,7 @@ import datetime
 import time
 import numpy as np
 import psutil
+import pynvml
 import csv
 import torch
 from ultralytics import YOLO
@@ -37,11 +38,11 @@ if use_cuda and nvml_available:
 model = YOLO(model_path)
 
 # === Initialize the camera ===
-camera_index = 6  # Adjust as needed
+camera_index = 0  # Adjust as needed
 cap = cv2.VideoCapture(camera_index)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-cap.set(cv2.CAP_PROP_FPS, 30)
+cap.set(cv2.CAP_PROP_FPS, 15)
 
 if not cap.isOpened():
     print(f"Error: Could not open camera at index {camera_index}")
