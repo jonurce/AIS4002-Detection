@@ -72,7 +72,7 @@ for nn in range(1,3):
     plt.yscale('log')  # Set logarithmic scale for y-axis
     plt.title(f'Total Training and Validation Loss for Faster R-CNN in Task {nn}', fontsize=font_size + 2)
     plt.xlabel('Epoch', fontsize=font_size)
-    plt.ylabel('Total Validation Loss (Log Scale)', fontsize=font_size)
+    plt.ylabel('Total Loss (Log Scale)', fontsize=font_size)
     plt.tick_params(axis='both', labelsize=font_size)  # Tick labels
     plt.grid(True, which="both", ls="--")  # Grid for both major and minor ticks
     plt.legend(fontsize=font_size)
