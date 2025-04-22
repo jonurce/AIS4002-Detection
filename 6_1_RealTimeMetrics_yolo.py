@@ -19,8 +19,10 @@ except ImportError:
     nvml_available = False
 
 # === Setup paths ===
-model_path = "Runs_NN1/yolov8l_NN1/weights/best.pt"
-output_dir = "Detections/YOLOv8l_NN1"
+nn = 1
+model_name = f"yolov8n_NN{nn}"
+model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/weights/best.pt"
+output_dir = f"RealTime/{model_name}"
 os.makedirs(output_dir, exist_ok=True)
 
 # === CSV logging setup ===
@@ -41,8 +43,8 @@ if use_cuda and nvml_available:
 model = YOLO(model_path)
 
 # === Initialize the camera ===
-camera_index = 1  # Adjust as needed
-cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+camera_index = 6  # Adjust as needed
+cap = cv2.VideoCapture(camera_index) # cv2.CAP_DSHOW
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 cap.set(cv2.CAP_PROP_FPS, 30)

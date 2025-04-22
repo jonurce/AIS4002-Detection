@@ -22,8 +22,10 @@ except ImportError:
     nvml_available = False
 
 # Paths
-model_path = "Runs_NN1/faster_rcnn_NN1/best.pt"
-output_dir = "Detections/RCNN_NN1"
+nn = 2
+model_name = f"faster_rcnn_NN{nn}"
+model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/best.pth"
+output_dir = f"RealTime/{model_name}"
 csv_path = os.path.join(output_dir, "performance_metrics.csv")
 os.makedirs(output_dir, exist_ok=True)
 
@@ -53,12 +55,15 @@ def get_model(num_classes, model_path, device):
     model.eval()
     return model
 
-num_classes = 3  # Background, A, B
+if nn == 1:
+    num_classes = 3  # Background, A, B
+else:
+    num_classes = 11
 model = get_model(num_classes, model_path, device)
 
 # Initialize camera
-camera_index = 1
-cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+camera_index = 6
+cap = cv2.VideoCapture(camera_index) # cv2.CAP_DSHOW
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 cap.set(cv2.CAP_PROP_FPS, 30)
