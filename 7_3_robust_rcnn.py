@@ -91,9 +91,9 @@ if __name__ == "__main__":
     # Example usage
     image_input = "Datasets/Robustness"  # Can be directory or single image path
     output_dir = "Plots/Robustness"  # Output directory for annotated images
-    nn = 2
+    nn = 1
     model_name = f"faster_rcnn_NN{nn}"
-    model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/best.pth"  # Path to saved Faster R-CNN model
+    model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/best.pt"  # Path to saved Faster R-CNN model
 
     classes = []
     if nn == 1:
