@@ -1,48 +1,55 @@
 import os
-import cv2
 import torch
 import torchvision
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
-from torchvision.transforms import ToTensor
-from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import v2 as T
+from torch.utils.data import DataLoader, Dataset
+from torchvision.ops import box_iou
+from PIL import Image
 import numpy as np
-import yaml
+import pandas as pd
+import time
 
-class DroneStationDataset(Dataset):
-    def __init__(self, root, split, transform=None):
+class DroneStationHoleDataset(Dataset):
+    def __init__(self, root, split, transforms=None):
         self.root = root
         self.split = split
-        self.transform = transform
+        self.transforms = transforms
         self.image_dir = os.path.join(root, split, "images")
         self.label_dir = os.path.join(root, split, "labels")
         self.images = [f for f in os.listdir(self.image_dir) if f.endswith(".jpg")]
-        self.classes = ["Drone", "Station"]  # Background is implicit (class 0)
+        self.class_names = [
+            'Drone', 'Station'
+        ]
 
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, idx):
-        # Load image
-        img_path = os.path.join(self.image_dir, self.images[idx])
-        img = cv2.imread(img_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        height, width = img.shape[:2]
+        img_name = self.images[idx]
+        img_path = os.path.join(self.image_dir, img_name)
+        label_path = os.path.join(self.label_dir, img_name.replace(".jpg", ".txt"))
 
-        # Load YOLO annotations
-        label_path = os.path.join(self.label_dir, self.images[idx].replace(".jpg", ".txt"))
+        # Load image
+        img = Image.open(img_path).convert("RGB")
+        img = T.ToTensor()(img)  # Convert to tensor
+
+        # Load annotations
         boxes = []
         labels = []
         if os.path.exists(label_path):
-            with open(label_path, "r") as f:
+            with open(label_path, 'r') as f:
                 for line in f:
-                    class_id, x_center, y_center, w, h = map(float, line.split())
-                    class_id = int(class_id) + 1  # YOLO: 0=A, 1=B; Faster R-CNN: 1=A, 2=B (0=background)
-                    x1 = (x_center - w/2) * width
-                    y1 = (y_center - h/2) * height
-                    x2 = (x_center + w/2) * width
-                    y2 = (y_center + h/2) * height
-                    boxes.append([x1, y1, x2, y2])
-                    labels.append(class_id)
+                    class_id, x_center, y_center, w, h = map(float, line.strip().split())
+                    class_id = int(class_id)
+                    # Convert YOLO to COCO format (x_min, y_min, x_max, y_max)
+                    img_w, img_h = img.shape[2], img.shape[1]
+                    x_min = (x_center - w/2) * img_w
+                    y_min = (y_center - h/2) * img_h
+                    x_max = (x_center + w/2) * img_w
+                    y_max = (y_center + h/2) * img_h
+                    boxes.append([x_min, y_min, x_max, y_max])
+                    labels.append(class_id + 1)  # +1 for 1-based indexing (0 is background)
 
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
@@ -58,96 +65,279 @@ class DroneStationDataset(Dataset):
             "iscrowd": iscrowd
         }
 
-        if self.transform:
-            img = self.transform(img)
+        if self.transforms is not None:
+            img, target = self.transforms(img, target)
 
         return img, target
 
-def get_model(num_classes, device):
-    # Load pre-trained Faster R-CNN with ResNet-50 FPN
-    model = fasterrcnn_resnet50_fpn(pretrained=True)
-    # Replace classifier head for 2 classes + background
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
-    return model.to(device)
+def get_transform(train):
+    transforms = []
+    if train:
+        transforms.append(T.RandomHorizontalFlip(0.5))
+        transforms.append(T.RandomRotation(30))
+        transforms.append(T.ColorJitter(hue=0.015, saturation=0.7, brightness=0.4))
+    transforms.append(T.ToDtype(torch.float, scale=True))
+    return T.Compose(transforms)
+
+def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10):
+    model.train()
+    train_box_loss = 0
+    train_cls_loss = 0
+    total_batches = len(data_loader)
+    for i, (images, targets) in enumerate(data_loader):
+        images = [image.to(device) for image in images]
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        loss_dict = model(images, targets)
+        losses = sum(loss for loss in loss_dict.values())
+        train_box_loss += (loss_dict.get("loss_box_reg", 0) + loss_dict.get("loss_rpn_box_reg", 0)).item()
+        train_cls_loss += loss_dict.get("loss_classifier", 0).item()
+
+        optimizer.zero_grad()
+        losses.backward()
+        optimizer.step()
+        if i % print_freq == 0:
+            print(f"Epoch {epoch}, Iteration {i}, Loss: {losses.item():.4f}")
+
+    train_box_loss /= total_batches
+    train_cls_loss /= total_batches
+    return train_box_loss, train_cls_loss
+
+def evaluate(model, data_loader, device):
+    model.eval()
+    total, correct = 0, 0
+    val_box_loss = 0
+    val_cls_loss = 0
+    total_batches = len(data_loader)
+    with torch.no_grad():
+        for images, targets in data_loader:
+            images = [image.to(device) for image in images]
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            # Compute validation loss
+            model.train()  # Required for loss computation
+            loss_dict = model(images, targets)
+            model.eval()
+            val_box_loss += (loss_dict.get("loss_box_reg", 0) + loss_dict.get("loss_rpn_box_reg", 0)).item()
+            val_cls_loss += loss_dict.get("loss_classifier", 0).item()
+
+            # Compute accuracy
+            outputs = model(images)
+            for target, output in zip(targets, outputs):
+                if not isinstance(output, dict) or 'labels' not in output:
+                    print(f"Unexpected output format: {output}")
+                    continue
+
+                pred_labels = output['labels']
+                pred_boxes = output['boxes']
+                true_labels = target['labels']
+                true_boxes = target['boxes']
+
+                if len(true_labels) == 0 or len(pred_labels) == 0:
+                    continue
+
+                iou = box_iou(pred_boxes, true_boxes)
+                iou_threshold = 0.5
+                max_iou, match_indices = iou.max(dim=1)
+
+                for pred_idx, true_idx in enumerate(match_indices):
+                    if max_iou[pred_idx] > iou_threshold:
+                        if pred_labels[pred_idx] == true_labels[true_idx]:
+                            correct += 1
+                total += len(true_labels)
+
+    accuracy = correct / total if total > 0 else 0
+    val_box_loss /= total_batches
+    val_cls_loss /= total_batches
+    print(f"Validation Accuracy: {accuracy:.4f}")
+    return accuracy, val_box_loss, val_cls_loss
+
+def evaluate_metrics(model, data_loader, device):
+    model.eval()
+    predictions = []
+    all_targets = []
+    with torch.no_grad():
+        for images, targets in data_loader:
+            images = [img.to(device) for img in images]
+            outputs = model([img.to(device) for img in images])
+            for i, output in enumerate(outputs):
+                predictions.append({
+                    "boxes": output["boxes"].cpu(),
+                    "scores": output["scores"].cpu(),
+                    "labels": output["labels"].cpu()
+                })
+                all_targets.append({
+                    "boxes": targets[i]["boxes"].cpu(),
+                    "labels": targets[i]["labels"].cpu()
+                })
+
+    precision, recall, map50, map50_95 = compute_metrics(predictions, all_targets)
+    return precision, recall, map50, map50_95
+
+
+import numpy as np
+from torchvision.ops import box_iou
+
+
+def compute_metrics(predictions, targets, iou_thres=0.5):
+    # Validate IoU threshold
+    assert 0 <= iou_thres <= 1, "IoU threshold must be between 0 and 1"
+
+    true_positives = 0
+    false_positives = 0
+    false_negatives = 0
+    map_scores = []
+
+    # Define IoU thresholds for mAP@0.5:0.95
+    iou_thresholds = np.arange(0.5, 1.0, 0.05)  # [0.5, 0.55, ..., 0.95]
+    ap_scores_per_threshold = [[] for _ in iou_thresholds]
+
+    for pred, tgt in zip(predictions, targets):
+        pred_boxes = pred["boxes"]
+        pred_labels = pred["labels"]
+        pred_scores = pred["scores"]
+        tgt_boxes = tgt["boxes"]
+        tgt_labels = tgt["labels"]
+
+        # Filter predictions by confidence
+        conf_mask = pred_scores > 0.5
+        pred_boxes = pred_boxes[conf_mask]
+        pred_labels = pred_labels[conf_mask]
+        pred_scores = pred_scores[conf_mask]
+
+        # Handle empty cases
+        if len(pred_boxes) == 0 and len(tgt_boxes) == 0:
+            for ap_scores in ap_scores_per_threshold:
+                ap_scores.append(0)  # No predictions or ground truths
+            continue
+        if len(pred_boxes) == 0:
+            false_negatives += len(tgt_boxes)
+            for ap_scores in ap_scores_per_threshold:
+                ap_scores.append(0)  # Missed all ground truths
+            continue
+        if len(tgt_boxes) == 0:
+            false_positives += len(pred_boxes)
+            for ap_scores in ap_scores_per_threshold:
+                ap_scores.append(0)  # All predictions are false
+            continue
+
+        # Compute IoU
+        iou = box_iou(pred_boxes, tgt_boxes)
+        max_iou, max_idx = iou.max(dim=1)
+
+        # Evaluate for each IoU threshold
+        for ap_scores, current_iou_thres in zip(ap_scores_per_threshold, iou_thresholds):
+            matched_gt = set()
+            true_positives_sample = 0
+            false_positives_sample = 0
+
+            # Sort predictions by confidence
+            sorted_indices = pred_scores.argsort(descending=True)
+            for i in sorted_indices:
+                iou_val, idx = max_iou[i], max_idx[i]
+                if (iou_val >= current_iou_thres and
+                        pred_labels[i] == tgt_labels[idx] and
+                        idx.item() not in matched_gt):
+                    true_positives_sample += 1
+                    matched_gt.add(idx.item())
+                else:
+                    false_positives_sample += 1
+
+            # Update global counts for iou_thres (used for precision/recall)
+            if current_iou_thres == iou_thres:
+                true_positives += true_positives_sample
+                false_positives += false_positives_sample
+                false_negatives += len(tgt_boxes) - len(matched_gt)
+
+            # Compute AP for this sample (simplified as precision)
+            ap = (true_positives_sample /
+                  (true_positives_sample + false_positives_sample + 1e-6)
+                  if (true_positives_sample + false_positives_sample) > 0 else 0)
+            ap_scores.append(ap)
+
+    # Compute final metrics
+    precision = (true_positives / (true_positives + false_positives)
+                 if (true_positives + false_positives) > 0 else 0)
+    recall = (true_positives / (true_positives + false_negatives)
+              if (true_positives + false_negatives) > 0 else 0)
+    map50 = np.mean(ap_scores_per_threshold[0]) if ap_scores_per_threshold[0] else 0
+    map50_95 = np.mean([np.mean(ap_scores) for ap_scores in ap_scores_per_threshold
+                        if ap_scores]) if any(ap_scores_per_threshold) else 0
+
+    return precision, recall, map50, map50_95
 
 def main():
-    #Device
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-
     # Paths
     dataset_root = "Dataset_NN1"
-    output_dir = "Runs_NN1/faster_rcnn_NN1"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    output_dir = "Runs_NN1/faster_rcnn_NN1_new"
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Dataset
-    train_dataset = DroneStationDataset(dataset_root, "train", transform=ToTensor())
-    val_dataset = DroneStationDataset(dataset_root, "val", transform=ToTensor())
-    train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=2, collate_fn=lambda x: tuple(zip(*x)))
-    val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2, collate_fn=lambda x: tuple(zip(*x)))
+    # Datasets
+    train_dataset = DroneStationHoleDataset(dataset_root, "train", get_transform(train=True))
+    val_dataset = DroneStationHoleDataset(dataset_root, "val", get_transform(train=False))
+    train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4, collate_fn=lambda x: tuple(zip(*x)))
+    val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=4, collate_fn=lambda x: tuple(zip(*x)))
 
     # Model
-    num_classes = 3  # 2 classes (A, B) + background
-    model = get_model(num_classes, device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = fasterrcnn_resnet50_fpn(pretrained=True)
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes=11)
+    model.to(device)
 
     # Optimizer
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+
+    # Metrics storage
+    results = []
+    columns = [
+        "epoch", "time",
+        "train/box_loss", "train/cls_loss", "train/dfl_loss",
+        "metrics/precision(B)", "metrics/recall(B)", "metrics/mAP50(B)", "metrics/mAP50-95(B)",
+        "val/box_loss", "val/cls_loss", "val/dfl_loss",
+        "lr/pg0", "lr/pg1", "lr/pg2"
+    ]
 
     # Training loop
     num_epochs = 100
-    best_val_loss = float("inf")
-    patience = 100
-    patience_counter = 0
-
+    best_accuracy = 0
+    start_time = time.time()
     for epoch in range(num_epochs):
-        # Train
-        model.train()
-        train_loss = 0
-        for images, targets in train_loader:
-            images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            loss_dict = model(images, targets)
-            losses = sum(loss for loss in loss_dict.values())
-            train_loss += losses.item()
+        train_box_loss, train_cls_loss = train_one_epoch(model, optimizer, train_loader, device, epoch)
+        train_loss = train_box_loss + train_cls_loss
 
-            optimizer.zero_grad()
-            losses.backward()
-            optimizer.step()
+        accuracy, val_box_loss, val_cls_loss = evaluate(model, val_loader, device)
+        val_loss = val_box_loss + val_cls_loss
 
-        train_loss /= len(train_loader)
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+        precision, recall, map50, map50_95 = evaluate_metrics(model, val_loader, device)
 
-        # Validate
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for images, targets in val_loader:
-                images = list(image.to(device) for image in images)
-                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-                model.train()
-                loss_dict = model(images, targets)
-                model.eval()
-                losses = sum(loss for loss in loss_dict.values())
-                val_loss += losses.item()
+        lr = optimizer.param_groups[0]["lr"]
+        epoch_time = time.time() - start_time
 
-        val_loss /= len(val_loader)
-        print(f"Epoch {epoch+1}/{num_epochs}, Val Loss: {val_loss:.4f}")
+        results.append([
+            epoch + 1, epoch_time,
+            train_box_loss, train_cls_loss, 0,
+            precision, recall, map50, map50_95,
+            val_box_loss, val_cls_loss, 0,
+            lr, lr, lr
+        ])
 
-        # Save best model
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            torch.save(model.state_dict(), os.path.join(output_dir, "best.pt"))
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                print("Early stopping triggered")
-                break
+        print(f"Epoch {epoch+1}/{num_epochs}, "
+              f"Train Loss: {train_loss:.4f} (Box: {train_box_loss:.4f}, Cls: {train_cls_loss:.4f}), "
+              f"Val Loss: {val_loss:.4f} (Box: {val_box_loss:.4f}, Cls: {val_cls_loss:.4f}), "
+              f"Precision: {precision:.4f}, Recall: {recall:.4f}, mAP50: {map50:.4f}, mAP50-95: {map50_95:.4f}")
 
-    print(f"Training completed. Best model saved to {output_dir}/best.pt")
+        lr_scheduler.step()
+
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            torch.save(model.state_dict(), os.path.join(output_dir, "best.pth"))
+
+        df = pd.DataFrame(results, columns=columns)
+        df.to_csv(os.path.join(output_dir, "results.csv"), index=False)
+
+    print(f"Training completed. Best model saved in {output_dir}/best.pth")
+    print(f"Results saved to {output_dir}/results.csv")
 
 if __name__ == "__main__":
     main()
