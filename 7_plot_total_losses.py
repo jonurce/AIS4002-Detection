@@ -15,7 +15,7 @@ for nn in range(1,3):
     data_s = pd.read_csv(f'Datasets/Dataset_NN{nn}/Runs_NN{nn}/yolov8s_NN{nn}/results.csv')
     data_m = pd.read_csv(f'Datasets/Dataset_NN{nn}/Runs_NN{nn}/yolov8m_NN{nn}/results.csv')
     data_l = pd.read_csv(f'Datasets/Dataset_NN{nn}/Runs_NN{nn}/yolov8l_NN{nn}/results.csv')
-    data_rcnn = pd.read_csv(f'Datasets/Dataset_NN{nn}/Runs_NN{nn}/faster_rcnn_NN{nn}/results.csv')
+    data_rcnn = pd.read_csv(f'Datasets/Dataset_NN{nn}/Runs_NN{nn}/faster_rcnn_NN{nn}_new/results.csv')
 
     # Compute total train and validation losses
     data_n['total_train_loss'] = data_n['train/box_loss'] + data_n['train/cls_loss'] + data_n['train/dfl_loss']
