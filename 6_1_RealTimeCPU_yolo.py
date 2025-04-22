@@ -9,7 +9,7 @@ import torch
 from ultralytics import YOLO
 
 # === Setup paths ===
-nn = 2
+nn = 1
 model_name = f"yolov8l_NN{nn}"
 model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/weights/best.pt"
 output_dir = f"RealTime/{model_name}"

@@ -12,9 +12,9 @@ import psutil
 import csv
 
 # Paths
-nn = 2
+nn = 1
 model_name = f"faster_rcnn_NN{nn}"
-model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/best.pth"
+model_path = f"Datasets/Dataset_NN{nn}/Runs_NN{nn}/{model_name}/best.pt"
 output_dir = f"RealTime/{model_name}"
 csv_path = os.path.join(output_dir, "performance_metrics.csv")
 os.makedirs(output_dir, exist_ok=True)
@@ -87,7 +87,7 @@ try:
     print(
         "Real-time detection started for 10 seconds. Press SPACE to save frame, 'q' to quit early, 'u'/'d' for conf, 'i'/'o' for IoU.")
     with open(csv_path, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=["timestamp", "inference_time_ms", "fps", "cpu_percent", "power_watts"])
+        writer = csv.DictWriter(csvfile, fieldnames=["timestamp", "inference_time_ms", "fps", "cpu_percent", "ram_used_gb", "power_watts"])
         writer.writeheader()
 
         while (time.time() - start_time) < duration:
@@ -132,6 +132,7 @@ try:
 
             # === System metrics ===
             cpu_util = psutil.cpu_percent()
+            ram_used_gb = psutil.virtual_memory().used / 1e9  # System RAM in GB
 
             # === Power monitoring ===
             power_watts = 0.0
@@ -152,6 +153,7 @@ try:
                 "inference_time_ms": inference_time_ms,
                 "fps": current_fps,
                 "cpu_percent": cpu_util,
+                "ram_used_gb": ram_used_gb,
                 "power_watts": power_watts
             }
             metrics_list.append(metrics)
@@ -162,6 +164,7 @@ try:
                 f"Inference: {inference_time_ms:.1f} ms",
                 f"FPS: {current_fps:.1f}",
                 f"CPU: {cpu_util:.1f}%",
+                f"RAM: {ram_used_gb:.2f} GB",
                 f"Power: {power_watts:.1f} W",
                 f"Conf: {conf:.2f} IoU: {iou:.2f}"
             ]
@@ -196,12 +199,14 @@ try:
         avg_inference_time = np.mean([m["inference_time_ms"] for m in metrics_list])
         avg_fps = np.mean([m["fps"] for m in metrics_list])
         avg_cpu_util = np.mean([m["cpu_percent"] for m in metrics_list])
+        avg_ram_used = np.mean([m["ram_used_gb"] for m in metrics_list])
         avg_power_watts = np.mean([m["power_watts"] for m in metrics_list])
 
         print("\n=== Performance Summary ===")
         print(f"Average Inference Time: {avg_inference_time:.2f} ms")
         print(f"Average FPS: {avg_fps:.2f}")
         print(f"Average CPU Utilization: {avg_cpu_util:.2f}%")
+        print(f"Average RAM Usage: {avg_ram_used:.2f} GB")
         print(f"Average Power Consumption: {avg_power_watts:.2f} W")
         if battery_available and not psutil.sensors_battery().power_plugged:
             print("(Power measured via battery discharge rate)")
