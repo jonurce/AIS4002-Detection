@@ -7,5 +7,8 @@ All the details are described in the project's report:
 ## Folder and Files Structure
 The folders and files are structured in the next way:  
 ```
-files
+├── indicates a file or folder at the current level.
+│ aligns nested items for clarity.
+└── marks the last item in a directory.
+
 ´´´
