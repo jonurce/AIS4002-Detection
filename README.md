@@ -1,5 +1,5 @@
 # Detection Model for Compartment Detection and Classification
-This project trains and compares 5 object detection and classification models for two different detection tasks:
+This project trains and compares 5 object detection and classification models (YOLOv8n, YOLOv8s, YOLOv8, YOLOv8l, Faster-RCNN) for two different detection tasks:
 
 - Task 1: Detect a compartment and classify it as:
   - 0: Drone
