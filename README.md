@@ -10,10 +10,18 @@ The folders and files are structured in the next way:
 ```
 ├── Datasets
 │    ├── Dataset_NN1
+│    │    ├── Dataset_NN1
+│    │    │      ├── test
+│    │    │      ├── train
+│    │    │      └── val
+│    │    ├── 1_CheckLabels_NN1
+│    │    ├── 4_TrainRCNN_NN1
 │    ├── Dataset_NN2
+│    ├── Original
+│    └── Robustness
 ├── FeatureMaps
 ├── Plots
-├── RealTime
+├── ProjectReports
 ├── 0_TakePictures
 ├── 2_SplitDataset
 ├── 3_ValidateDataset
